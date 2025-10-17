@@ -92,3 +92,98 @@
 # {'type': 'cm_matrix', 'dataset': 'train', 'true_0': {"predicted_0": 15562, "predicte_1": 666}, 'true_1': {"predicted_0": 3333, "predicted_1": 1444}}
 # {'type': 'cm_matrix', 'dataset': 'test', 'true_0': {"predicted_0": 15562, "predicte_1": 650}, 'true_1': {"predicted_0": 2490, "predicted_1": 1420}}
 #
+
+import os
+import pandas as pd
+import gzip
+import json
+import pickle
+
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import confusion_matrix, balanced_accuracy_score, precision_score, recall_score, f1_score
+
+"Paso 1: cargar y preprocesar datos"
+def cargar_preprocesar_datos():
+    train_dataset = pd.read_csv("../files/input/train_data.csv.zip", index_col=False)
+    test_dataset = pd.read_csv("../files/input/test_data.csv.zip", index_col=False)
+
+    train_dataset.rename(columns={"default payment next month": "default"}, inplace=True)
+    test_dataset.rename(columns={"default payment next month": "default"}, inplace=True)
+
+    train_dataset.drop(columns="ID", inplace=True)
+    test_dataset.drop(columns="ID", inplace=True)
+
+    train_dataset = train_dataset[train_dataset["EDUCATION"] != 0]
+    test_dataset = test_dataset[test_dataset["EDUCATION"] != 0]
+
+    train_dataset = train_dataset[train_dataset["MARRIAGE"] != 0]
+    test_dataset = test_dataset[test_dataset["MARRIAGE"] != 0]
+
+    train_dataset["EDUCATION"] = train_dataset["EDUCATION"].apply(lambda x: 4 if x > 4 else x)
+    test_dataset["EDUCATION"] = test_dataset["EDUCATION"].apply(lambda x: 4 if x > 4 else x)
+
+    return train_dataset, test_dataset
+
+"Paso 2: División de los datos en conjuntos de entrenamiento y prueba"
+def make_train_test_split(train_dataset, test_dataset):
+    X_train = train_dataset.drop(columns="default")
+    y_train = train_dataset["default"]
+
+    X_test = test_dataset.drop(columns="default")
+    y_test = test_dataset["default"]
+
+    return X_train, X_test, y_train, y_test
+
+"Paso 3: Crear el Pipeline y preprocesar las variables categóricas usando OneHotEncoder y las numéricas sin cambios"
+def make_pipeline():
+    categorical_features = ["EDUCATION", "MARRIAGE", "SEX"]
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("cat", OneHotEncoder(), categorical_features),
+        ],
+        remainder='passthrough'
+    )
+
+    pipeline = Pipeline([
+        ("preprocessor", preprocessor),
+        ("rf", RandomForestClassifier(random_state=42))
+    ])
+
+    return pipeline
+
+"Paso 4: Optimización de los hiperparámetros"
+def make_grid_search(pipeline, X_train, y_train):
+    param_grid = {
+    "rf__n_estimators": [100, 200],
+    "rf__max_depth": [5, 10, None],
+    "rf__min_samples_split": [2, 5],
+    "rf__min_samples_leaf": [1, 2]
+    }
+
+    grid = GridSearchCV(
+    pipeline,
+    param_grid,
+    cv = 10,
+    scoring="balanced_accuracy",
+    n_jobs=-1,
+    verbose=1
+    )
+    grid.fit(X_train, y_train)
+
+    return grid
+
+"Paso 5: Guardar Modelo"
+def save_estimator(estimator):
+    models_path = "/files/models"
+    os.makedirs(models_path, exist_ok=True)
+
+    model_file = os.path.join(models_path, "model.pkl.gz")
+
+    with gzip.open(model_file, "wb") as file:
+        pickle.dump(estimator, file)  
+
