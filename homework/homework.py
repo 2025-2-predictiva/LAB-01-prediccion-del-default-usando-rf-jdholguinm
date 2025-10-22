@@ -187,3 +187,84 @@ def save_estimator(estimator):
     with gzip.open(model_file, "wb") as file:
         pickle.dump(estimator, file)  
 
+"Paso 6: Metricas y guardarlas en formato JSON"
+
+def calc_metrics(model, X_train, y_train, X_test, y_test):
+
+    y_train_pred = model.predict(X_train)
+    y_test_pred = model.predict(X_test)
+    cm_train = confusion_matrix(y_train, y_train_pred)
+    cm_test = confusion_matrix(y_test, y_test_pred)
+
+
+    metricas =[
+        {
+            'type': 'metrics',
+            'dataset': 'train',
+            'precision': precision_score(y_train, y_train_pred, zero_division=0),
+            'balanced_accuracy': balanced_accuracy_score(y_train, y_train_pred),
+            'recall': recall_score(y_train, y_train_pred, zero_division=0),
+            'f1_score': f1_score(y_train, y_train_pred, zero_division=0)
+        },
+        {
+            'type': 'metrics',
+            'dataset': 'test',
+            'precision': precision_score(y_test, y_test_pred, zero_division=0),
+            'balanced_accuracy': balanced_accuracy_score(y_test, y_test_pred),
+            'recall': recall_score(y_test, y_test_pred, zero_division=0),
+            'f1_score': f1_score(y_test, y_test_pred, zero_division=0)
+        },
+        {
+            'type': 'cm_matrix',
+            'dataset': 'train',
+            'true_0': {'predicted_0': int(cm_train[0, 0]), 'predicted_1': int(cm_train[0, 1])},
+            'true_1': {'predicted_0': int(cm_train[1, 0]), 'predicted_1': int(cm_train[1, 1])}
+        },
+        {
+            'type': 'cm_matrix',
+            'dataset': 'test',
+            'true_0': {'predicted_0': int(cm_test[0, 0]), 'predicted_1': int(cm_test[0, 1])},
+            'true_1': {'predicted_0': int(cm_test[1, 0]), 'predicted_1': int(cm_test[1, 1])}
+        }
+
+    ]
+
+    return metricas
+
+
+
+def save_metrics(metricas, output_path="files/output/metrics.json"):
+    import json
+    import os
+
+    """
+    Guarda las métricas en formato JSON.
+
+    Parámetros:
+    -----------
+    metricas : lista devuelta por metrics()
+    output_path : ruta del archivo JSON a guardar
+    """
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(metricas, f, indent=4, ensure_ascii=False)
+
+    print(f"Métricas guardadas en: {output_path}")
+
+"Ejecución del modelo"
+
+def main():
+    train_dataset, test_dataset = cargar_preprocesar_datos()
+    X_train, y_train, X_test, y_test = make_train_test_split(train_dataset, test_dataset)
+    pipeline = make_pipeline()
+    model = make_grid_search(pipeline, X_train, y_train)
+    save_estimator(model)
+    metrics = calc_metrics(model, X_train, y_train, X_test, y_test)
+    save_metrics(metrics)
+
+    print(model.best_estimator_)
+    print(model.best_params_)
+
+if __name__ == "__main__":
+    main()
