@@ -98,6 +98,8 @@ import pandas as pd
 import gzip
 import json
 import pickle
+import numpy as np
+np.random.seed(42)
 
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
@@ -108,8 +110,8 @@ from sklearn.metrics import confusion_matrix, balanced_accuracy_score, precision
 
 "Paso 1: cargar y preprocesar datos"
 def cargar_preprocesar_datos():
-    train_dataset = pd.read_csv("../files/input/train_data.csv.zip", index_col=False)
-    test_dataset = pd.read_csv("../files/input/test_data.csv.zip", index_col=False)
+    train_dataset = pd.read_csv("files/input/train_data.csv.zip", index_col=False)
+    test_dataset = pd.read_csv("files/input/test_data.csv.zip", index_col=False)
 
     train_dataset.rename(columns={"default payment next month": "default"}, inplace=True)
     test_dataset.rename(columns={"default payment next month": "default"}, inplace=True)
@@ -136,7 +138,7 @@ def make_train_test_split(train_dataset, test_dataset):
     X_test = test_dataset.drop(columns="default")
     y_test = test_dataset["default"]
 
-    return X_train, X_test, y_train, y_test
+    return X_train, y_train, X_test, y_test
 
 "Paso 3: Crear el Pipeline y preprocesar las variables categóricas usando OneHotEncoder y las numéricas sin cambios"
 def make_pipeline():
@@ -160,9 +162,10 @@ def make_pipeline():
 def make_grid_search(pipeline, X_train, y_train):
     param_grid = {
     "rf__n_estimators": [100, 200],
-    "rf__max_depth": [5, 10, None],
-    "rf__min_samples_split": [2, 5],
-    "rf__min_samples_leaf": [1, 2]
+    "rf__max_depth": [10, None],
+    "rf__min_samples_split": [10],
+    "rf__min_samples_leaf": [2, 4],
+    "rf__max_features": [25]    
     }
 
     grid = GridSearchCV(
@@ -179,9 +182,9 @@ def make_grid_search(pipeline, X_train, y_train):
 
 "Paso 5: Guardar Modelo"
 def save_estimator(estimator):
-    models_path = "/files/models"
+    models_path = "files/models"
     os.makedirs(models_path, exist_ok=True)
-
+    print("Guardando modelo en:", models_path)  # 👈 agrega esto
     model_file = os.path.join(models_path, "model.pkl.gz")
 
     with gzip.open(model_file, "wb") as file:
@@ -233,38 +236,35 @@ def calc_metrics(model, X_train, y_train, X_test, y_test):
 
 
 
-def save_metrics(metricas, output_path="files/output/metrics.json"):
-    import json
-    import os
+def save_metrics(metrics):
+    output_path="files/output"
+    os.makedirs(output_path, exist_ok=True)
+    metrics_file = os.path.join(output_path, "metrics.json")
+   
+    # El test espera un archivo JSONL (una métrica por línea)
+    with open(metrics_file, "w", encoding="utf-8") as f:
+        for metric in metrics:
+            json.dump(metric, f)
+            f.write("\n")
 
-    """
-    Guarda las métricas en formato JSON.
-
-    Parámetros:
-    -----------
-    metricas : lista devuelta por metrics()
-    output_path : ruta del archivo JSON a guardar
-    """
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(metricas, f, indent=4, ensure_ascii=False)
-
-    print(f"Métricas guardadas en: {output_path}")
+    print("Métricas guardadas en:", metrics_file)
 
 "Ejecución del modelo"
 
 def main():
-    train_dataset, test_dataset = cargar_preprocesar_datos()
-    X_train, y_train, X_test, y_test = make_train_test_split(train_dataset, test_dataset)
-    pipeline = make_pipeline()
-    model = make_grid_search(pipeline, X_train, y_train)
-    save_estimator(model)
-    metrics = calc_metrics(model, X_train, y_train, X_test, y_test)
-    save_metrics(metrics)
-
-    print(model.best_estimator_)
-    print(model.best_params_)
+    try:
+        train_dataset, test_dataset = cargar_preprocesar_datos()
+        X_train, y_train, X_test, y_test = make_train_test_split(train_dataset, test_dataset)
+        pipeline = make_pipeline()
+        model = make_grid_search(pipeline, X_train, y_train)
+        save_estimator(model)
+        metrics = calc_metrics(model, X_train, y_train, X_test, y_test)
+        save_metrics(metrics)
+        print(model.best_estimator_)
+        print(model.best_params_)
+    except Exception as e:
+        print("ERROR:", e)
+    
 
 if __name__ == "__main__":
     main()
